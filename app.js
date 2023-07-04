@@ -135,6 +135,7 @@ module.exports.handler = async (event) => {
           width: 56px;
           height: 56px;
           background-size: contain;
+          margin-bottom: 16px;
       }
       
       .wrapper {
