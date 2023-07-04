@@ -107,7 +107,7 @@ module.exports.handler = async (event) => {
           padding: 0;
           box-sizing: border-box;
           background-color: ${background};
-          padding: 64px 64px;
+          padding: 72px 64px;
           position: relative;
           background-image: url('data:image/svg+xml;base64,${modifiedSvgBuffer}');
           font-family: "Noto Color Emoji";
@@ -173,7 +173,7 @@ module.exports.handler = async (event) => {
       
       .main-text {
           margin: 0;
-          margin-bottom: 16px;
+          margin-bottom: 24px;
           font-size: 60px;
           font-weight: 600;
       }
