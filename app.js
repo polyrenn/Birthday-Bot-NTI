@@ -5,7 +5,8 @@ const { WebClient } = require('@slack/web-api');
 const { GetObjectCommand, S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const fs = require('fs');
-
+const useColorScheme = require('./color')
+//const localNodeHtmlToImageImport = require('./local')
 
 const s3 = new S3Client({
     credentials: {
@@ -26,6 +27,8 @@ const getUrl = async () => {
 }
 
 //getUrl()
+
+//localNodeHtmlToImageImport();
 
 
 
@@ -48,6 +51,20 @@ module.exports.handler = async (event) => {
 
     const web = new WebClient('xoxb-4699850119287-4719021486260-Ds0sNpdtjqgpcT0Jge1hJvvr');
 
+    //Read Vector File
+    const contents = fs.readFileSync('Group5.svg', 'utf8');
+    //Define a regular expression to search for
+
+    const regex = /#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})/g;
+
+    //Probably Refactor into a function that returns a value
+
+    const streakBackgroundColor = useColorScheme(event.color);
+    // Replace all instances of the regular expression with a new string
+    const newContents = contents.replaceAll(regex, streakBackgroundColor?.foreground);
+
+    // Create Svg Buffer
+    const modifiedSvgBuffer = Buffer.from(newContents).toString('base64');
     
 
     const paramsEvent = {Bucket: 'slack-transformed-images', Key: event.key};
@@ -70,6 +87,11 @@ module.exports.handler = async (event) => {
 
     const backgroundStreaks = await fs.readFileSync('./Group5.svg').toString('base64')
     const base64Background = await new Buffer.from(backgroundStreaks)
+
+    //Background Color
+    const backgroundColor = useColorScheme(event.color)
+
+    const { background } = backgroundColor
    
    const image = await nodeHtmlToImage({
     html: `<html>
@@ -84,10 +106,10 @@ module.exports.handler = async (event) => {
           margin: 0;
           padding: 0;
           box-sizing: border-box;
-          background-color: blanchedalmond;
-          padding: 40px 60px;
+          background-color: ${background};
+          padding: 64px 64px;
           position: relative;
-          background-image: url('data:image/svg+xml;base64,${base64Background}');
+          background-image: url('data:image/svg+xml;base64,${modifiedSvgBuffer}');
           font-family: "Noto Color Emoji";
         }
         h3 {
@@ -152,7 +174,7 @@ module.exports.handler = async (event) => {
       .main-text {
           margin: 0;
           margin-bottom: 16px;
-          font-size: 64px;
+          font-size: 60px;
           font-weight: 600;
       }
       
@@ -179,9 +201,9 @@ module.exports.handler = async (event) => {
       }
       
       .subtext {
-          font-size: 36px;
+          font-size: 40px;
           font-family: 'BR Firma';
-          font-weight: 400;
+          font-weight: 500;
           color: #0066f5
       }
         </style>
