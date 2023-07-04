@@ -5,69 +5,93 @@ const { WebClient } = require('@slack/web-api');
 const { GetObjectCommand, S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const fs = require('fs');
-const useColorScheme = require('./color')
-//const localNodeHtmlToImageImport = require('./local')
 
-const s3 = new S3Client({
-    credentials: {
-        accessKeyId: 'AKIA4OVWLAXW3TI64MWS',
-        secretAccessKey: '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',
-    }
-})
+async function localNodeHtmlToImage() {
 
-async function displayTitle()  {
-    console.log('dhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh')
+    const s3 = new S3Client({
+        credentials: {
+            accessKeyId: 'AKIA4OVWLAXW3TI64MWS',
+            secretAccessKey: '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',
+        }
+    })
+
+
+//I'm feeling Lucky
+const getColorScheme= (colorScheme) => {
+    const diagonalColorArray = [
+        {
+            colorScheme: 'blue',
+            foreground: '#CBE2EC',
+            background: '#E1F6FF'
+        },
+        {
+            colorScheme: 'timberwolf',
+            foreground:  '#D1D1C9',
+            background: '#FFFFEE'
+        },
+        {
+            colorScheme: 'cream',
+            foreground: '#E9F4B1',
+            background: '#CACDB9'
+        },
+        {
+            colorScheme: 'silver',
+            foreground: '#DCD9D9',
+            background: '#AAAAAA'
+        },
+        {
+            colorScheme: 'floral-white',
+            foreground: '#A8A6A6',
+            background: '#FFF7ED'
+        },
+        {
+            colorScheme: 'ivory',
+            foreground: '#E9F4B1',
+            background: '#FFFFEE'
+        },
+        {
+            colorScheme: 'papaya-whip',
+            foreground: '#DBD7D8',
+            background: '#FFEBCD'
+        }
+    ];
+    return diagonalColorArray.find((element) => element.colorScheme === colorScheme)
 }
-
-const getUrl = async () => {
-    const params = {Bucket: 'birthday-designs', Key: 'my-object-key'};
-    const command = new GetObjectCommand(params);
-    const url = await getSignedUrl(s3, command);
-    console.log(url)
-}
-
-//getUrl()
-
-//localNodeHtmlToImageImport();
-
-
-
-
-// Read the contents of the HTML file into a string
-const htmlString = fs.readFileSync('./app.html', 'utf8');
-
-
-
-// Print the HTML string to the console
-//console.log(htmlString);
-
-
-module.exports.handler = async (event) => {
-
-    //const objectKey = event.Records[0].s3.object.key;
-  
-    // Extract the file name from the object key
-    //const fileName = objectKey.split('/').pop();
-
-    const web = new WebClient('xoxb-4699850119287-4719021486260-Ds0sNpdtjqgpcT0Jge1hJvvr');
-
-    //Read Vector File
-    const contents = fs.readFileSync('Group5.svg', 'utf8');
-    //Define a regular expression to search for
-
-    const regex = /#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})/g;
-
-    //Probably Refactor into a function that returns a value
-
-    const streakBackgroundColor = useColorScheme(event.color);
-    // Replace all instances of the regular expression with a new string
-    const newContents = contents.replaceAll(regex, streakBackgroundColor?.foreground);
-
-    // Create Svg Buffer
-    const modifiedSvgBuffer = Buffer.from(newContents).toString('base64');
     
 
-    const paramsEvent = {Bucket: 'slack-transformed-images', Key: event.key};
+
+//Refactor to array of objects
+
+const diagonalColors = {
+    blue: '#CBE2EC',
+    timberwolf: '#D1D1C9',
+    cream: '#E9F4B1',
+    silver: '#A8A6A6' 
+}
+
+
+
+    const filename = 'svg.txt';
+const contents = fs.readFileSync('Group5.svg', 'utf8');
+//Define a regular expression to search for
+
+const regex = /#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})/g;
+
+//Probably Refactor into a function that returns a value
+
+const streakBackgroundColor = getColorScheme('silver');
+// Replace all instances of the regular expression with a new string
+const newContents = contents.replaceAll(regex, streakBackgroundColor?.foreground);
+
+const modifiedSvgBuffer = Buffer.from(newContents).toString('base64');
+
+// Write the modified contents back to the file
+fs.writeFileSync('Group5.svg', newContents, 'utf8');
+
+    
+    
+
+    const paramsEvent = {Bucket: 'slack-transformed-images', Key: 'Abee.jpg'};
     const commandEvent = new GetObjectCommand(paramsEvent);
     const url = await getSignedUrl(s3, commandEvent);
 
@@ -83,17 +107,16 @@ module.exports.handler = async (event) => {
     
 
     const cowrywiseLogo = await fs.readFileSync('./Vector.svg').toString('base64')
-    const base64Logo = await new Buffer.from(cowrywiseLogo)
+    const base64Logo = await Buffer.from(cowrywiseLogo)
 
     const backgroundStreaks = await fs.readFileSync('./Group5.svg').toString('base64')
-    const base64Background = await new Buffer.from(backgroundStreaks)
+    const base64Background = await Buffer.from(backgroundStreaks)
 
-    //Background Color
-    const backgroundColor = useColorScheme(event.color)
-
-    const { background } = backgroundColor
+    const returnColorScheme = getColorScheme('silver')
+    console.log(returnColorScheme)
    
-   const image = await nodeHtmlToImage({
+    await nodeHtmlToImage({
+     output: './image.png',   
     html: `<html>
       <head>
       <meta charset="UTF-8">
@@ -106,8 +129,8 @@ module.exports.handler = async (event) => {
           margin: 0;
           padding: 0;
           box-sizing: border-box;
-          background-color: ${background};
-          padding: 64px 64px;
+          background-color: ${returnColorScheme?.background};
+          padding: 40px 60px;
           position: relative;
           background-image: url('data:image/svg+xml;base64,${modifiedSvgBuffer}');
           font-family: "Noto Color Emoji";
@@ -174,7 +197,7 @@ module.exports.handler = async (event) => {
       .main-text {
           margin: 0;
           margin-bottom: 16px;
-          font-size: 60px;
+          font-size: 64px;
           font-weight: 600;
       }
       
@@ -201,9 +224,9 @@ module.exports.handler = async (event) => {
       }
       
       .subtext {
-          font-size: 40px;
+          font-size: 36px;
           font-family: 'BR Firma';
-          font-weight: 500;
+          font-weight: 400;
           color: #0066f5
       }
         </style>
@@ -218,7 +241,7 @@ module.exports.handler = async (event) => {
           
           <div class="top-section">
               <div class="header">
-                  <p class="main-text">Happy Birthday ${event.name} 🎉</p>
+                  <p class="main-text">Happy Birthday Renn 🎉</p>
                   <p class="header-subtext">Have a great year!</p>
               </div>
           </div>
@@ -237,11 +260,6 @@ module.exports.handler = async (event) => {
   </body>
     </html>
     `,
-    puppeteer: puppeteer,
-    puppeteerArgs: {
-        args: chromium.args,
-        executablePath: await chromium.executablePath()
-    },
     beforeScreenshot: async (page) => {
        await page.setViewport({
             width: 1080,
@@ -250,64 +268,8 @@ module.exports.handler = async (event) => {
         });
     }
   })
-  console.log(image)
-  const params = {
-    Bucket: 'birthday-designs',
-    Key: 'my-object-key',
-    Body: image,
-    ContentType: 'image/jpeg'
-  };
   
-  const command = new PutObjectCommand(params);
+  }
   
-  const response = await s3.send(command);
-  console.log(response);
-  console.log(event)
-  const paramsGetSignedUrl = {Bucket: 'birthday-designs', Key: 'my-object-key'};
-  const commandGetSignedUrl = new GetObjectCommand(paramsGetSignedUrl);
-  const signedUrl = await getSignedUrl(s3, commandGetSignedUrl);
 
-  //Create Image Buffer
-
-  const remoteBirthdayImage = await fetch(signedUrl)
-  const remoteBirthdayImageArrayBuffer = await remoteBirthdayImage.arrayBuffer()
-
-  const imageBuffer = Buffer.from(remoteBirthdayImageArrayBuffer);
-
-
-  // Call the chat.postMessage method with the required parameters
-  //Here's Your Image It Expires Soon
-  const responsePostMessage = await web.chat.postMessage({
-    channel: 'C04LXD2JHLM',
-    blocks: [
-        {
-			"type": "section",
-			"text": {
-				"type": "plain_text",
-				"text": "Here's your Birthday Flyer"
-			}
-		},
-		{
-			"type": "image",
-			"title": {
-				"type": "plain_text",
-				"text": "Birthday Flyer",
-				"emoji": true
-			},
-			"image_url": `${signedUrl}`,
-			"alt_text": "Birthday Flyer"
-		},
-    ],
- 
-    });
-
-    const uploadBirthdayDesign = await web.filesUploadV2({
-        file: imageBuffer,
-        filename: 'Birthday Design',
-        channel_id: 'C04LXD2JHLM',
-        initial_comment: 'Birthday Design'
-  });  
-  return signedUrl
-};
-  
-  
+module.exports = localNodeHtmlToImage;
