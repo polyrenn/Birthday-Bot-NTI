@@ -110,7 +110,7 @@ module.exports.handler = async (event) => {
   //const fileName = objectKey.split('/').pop();
 
   const web = new WebClient(
-    "xoxb-4699850119287-4719021486260-79PMJ5fanMnXNcHkfdqD43QA"
+    process.env.SLACK_BOT_TOKEN
   );
 
   //Read Vector File
