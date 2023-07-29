@@ -1,99 +1,168 @@
 const puppeteer = require("puppeteer-core");
 const chromium = require("@sparticuz/chromium");
-const nodeHtmlToImage = require('node-html-to-image')
-const { WebClient } = require('@slack/web-api');
-const { GetObjectCommand, S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
+const nodeHtmlToImage = require("node-html-to-image");
+const { WebClient } = require("@slack/web-api");
+const {
+  GetObjectCommand,
+  S3Client,
+  PutObjectCommand,
+} = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const fs = require('fs');
-const useColorScheme = require('./color')
+const fs = require("fs");
+const useColorScheme = require("./color");
 //const localNodeHtmlToImageImport = require('./local')
 
 const s3 = new S3Client({
-    credentials: {
-        accessKeyId: 'AKIA4OVWLAXW3TI64MWS',
-        secretAccessKey: '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',
-    }
-})
+  credentials: {
+    accessKeyId: process.env.AWS_S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_S3_SECRET_ACCESS_KEY,
+  },
+});
 
-async function displayTitle()  {
-    console.log('dhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh')
-}
 
 const getUrl = async () => {
-    const params = {Bucket: 'birthday-designs', Key: 'my-object-key'};
-    const command = new GetObjectCommand(params);
-    const url = await getSignedUrl(s3, command);
-    console.log(url)
-}
-
-//getUrl()
-
-//localNodeHtmlToImageImport();
+  const params = { Bucket: "birthday-designs", Key: "my-object-key" };
+  const command = new GetObjectCommand(params);
+  const url = await getSignedUrl(s3, command);
+  console.log(url);
+};
 
 
+const uploadImageToS3 = async (fileUrlFromMessage, fileNameFromMessage) => {
+  const fileUrl = fileUrlFromMessage;
+  const downloadResponse = await fetch(fileUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+  });
+  const outputFilename = fileNameFromMessage;
 
+  const transformedBuffer = await downloadResponse.arrayBuffer();
 
-// Read the contents of the HTML file into a string
-const htmlString = fs.readFileSync('./app.html', 'utf8');
+  const transformed = Buffer.from(transformedBuffer);
 
+  const params = {
+    Bucket: "imgcroptest",
+    Key: fileNameFromMessage,
+    Body: transformed,
+    ContentType: "image/jpeg",
+  };
 
+  const command = new PutObjectCommand(params);
 
-// Print the HTML string to the console
-//console.log(htmlString);
+  const response = await s3.send(command);
 
+  console.log(response.$metadata);
+};
+
+const transformImageFromS3 = async (fileKey) => {
+  const imageRequest = JSON.stringify({
+    bucket: "imgcroptest",
+    key: fileKey,
+    edits: {
+      smartCrop: {
+        faceIndex: 0, // zero-based index of detected faces
+        padding: 500, // padding expressed in pixels, applied to all sides
+      },
+    },
+  });
+  const transformedRequestString = Buffer.from(imageRequest, "utf-8").toString(
+    "base64"
+  );
+  const CloudFrontUrl = "https://d2gtl62twmopm.cloudfront.net";
+
+  const editUrl = `${CloudFrontUrl}/${transformedRequestString}`;
+
+  const grayResponse = await fetch(editUrl, {
+    method: "GET",
+  });
+  const greyOutputFileName = "gray.jpg";
+  const transformedGrayBuffer = await grayResponse.arrayBuffer();
+  const transformedGray = Buffer.from(transformedGrayBuffer);
+  console.log(editUrl);
+  return transformedGray;
+};
+
+const uploadToSlackTransformedImages = async (fileKey, body) => {
+  const params = {
+    Bucket: "slack-transformed-images",
+    Key: `${fileKey}`,
+    ContentType: "image/jpeg",
+    Body: body,
+  };
+
+  const command = new PutObjectCommand(params);
+
+  const response = await s3.send(command);
+
+  console.log(response.$metadata);
+};
 
 module.exports.handler = async (event) => {
+  await uploadImageToS3(event.slackFileLink, event.fileName);
 
-    //const objectKey = event.Records[0].s3.object.key;
+  const transformedImage = await transformImageFromS3(event.fileName);
+
+  await uploadToSlackTransformedImages(event.fileName, transformedImage);
+
+  //const objectKey = event.Records[0].s3.object.key;
+
+  // Extract the file name from the object key
+  //const fileName = objectKey.split('/').pop();
+
+  const web = new WebClient(
+    "xoxb-4699850119287-4719021486260-79PMJ5fanMnXNcHkfdqD43QA"
+  );
+
+  //Read Vector File
+  const contents = fs.readFileSync("Group5.svg", "utf8");
   
-    // Extract the file name from the object key
-    //const fileName = objectKey.split('/').pop();
+  //Define a regular expression to search for
 
-    const web = new WebClient('xoxb-4699850119287-4719021486260-Ds0sNpdtjqgpcT0Jge1hJvvr');
+  const regex = /#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})/g;
 
-    //Read Vector File
-    const contents = fs.readFileSync('Group5.svg', 'utf8');
-    //Define a regular expression to search for
+  //Probably Refactor into a function that returns a value
 
-    const regex = /#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})/g;
+  const streakBackgroundColor = useColorScheme(event.color);
+  // Replace all instances of the regular expression with a new string
+  const newContents = contents.replaceAll(
+    regex,
+    streakBackgroundColor?.foreground
+  );
 
-    //Probably Refactor into a function that returns a value
+  // Create Svg Buffer
+  const modifiedSvgBuffer = Buffer.from(newContents).toString("base64");
 
-    const streakBackgroundColor = useColorScheme(event.color);
-    // Replace all instances of the regular expression with a new string
-    const newContents = contents.replaceAll(regex, streakBackgroundColor?.foreground);
+  const paramsEvent = {
+    Bucket: "slack-transformed-images",
+    Key: event.fileName,
+  };
+  const commandEvent = new GetObjectCommand(paramsEvent);
+  const url = await getSignedUrl(s3, commandEvent);
 
-    // Create Svg Buffer
-    const modifiedSvgBuffer = Buffer.from(newContents).toString('base64');
-    
+  const downloadResponse = await fetch(url, {
+    method: "GET",
+  });
 
-    const paramsEvent = {Bucket: 'slack-transformed-images', Key: event.key};
-    const commandEvent = new GetObjectCommand(paramsEvent);
-    const url = await getSignedUrl(s3, commandEvent);
+  const arrayBuffer = await downloadResponse.arrayBuffer();
 
-    const downloadResponse = await fetch(url, {
-        method: "GET",
-      });
-   
+  const base64Image = await Buffer.from(arrayBuffer).toString("base64");
 
-    const arrayBuffer = await downloadResponse.arrayBuffer()
-      
-    const base64Image = await Buffer.from(arrayBuffer).toString('base64');
-      
-    
+  const cowrywiseLogo = await fs
+    .readFileSync("./Vector.svg")
+    .toString("base64");
+  const base64Logo = await new Buffer.from(cowrywiseLogo);
 
-    const cowrywiseLogo = await fs.readFileSync('./Vector.svg').toString('base64')
-    const base64Logo = await new Buffer.from(cowrywiseLogo)
+  const backgroundStreaks = await fs
+    .readFileSync("./Group5.svg")
+    .toString("base64");
+  const base64Background = await new Buffer.from(backgroundStreaks);
 
-    const backgroundStreaks = await fs.readFileSync('./Group5.svg').toString('base64')
-    const base64Background = await new Buffer.from(backgroundStreaks)
+  //Background Color
+  const backgroundColor = useColorScheme(event.color);
 
-    //Background Color
-    const backgroundColor = useColorScheme(event.color)
+  const { background } = backgroundColor;
 
-    const { background } = backgroundColor
-   
-   const image = await nodeHtmlToImage({
+  const image = await nodeHtmlToImage({
     html: `<html>
       <head>
       <meta charset="UTF-8">
@@ -240,75 +309,75 @@ module.exports.handler = async (event) => {
     `,
     puppeteer: puppeteer,
     puppeteerArgs: {
-        args: chromium.args,
-        executablePath: await chromium.executablePath()
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
     },
     beforeScreenshot: async (page) => {
-       await page.setViewport({
-            width: 1080,
-            height: 1080,
-            deviceScaleFactor: 1
-        });
-    }
-  })
-  console.log(image)
+      await page.setViewport({
+        width: 1080,
+        height: 1080,
+        deviceScaleFactor: 1,
+      });
+    },
+  });
+  console.log(image);
   const params = {
-    Bucket: 'birthday-designs',
-    Key: 'my-object-key',
+    Bucket: "birthday-designs",
+    Key: "my-object-key",
     Body: image,
-    ContentType: 'image/jpeg'
+    ContentType: "image/jpeg",
   };
-  
+
   const command = new PutObjectCommand(params);
-  
+
   const response = await s3.send(command);
   console.log(response);
-  console.log(event)
-  const paramsGetSignedUrl = {Bucket: 'birthday-designs', Key: 'my-object-key'};
+  console.log(event);
+  const paramsGetSignedUrl = {
+    Bucket: "birthday-designs",
+    Key: "my-object-key",
+  };
   const commandGetSignedUrl = new GetObjectCommand(paramsGetSignedUrl);
   const signedUrl = await getSignedUrl(s3, commandGetSignedUrl);
 
   //Create Image Buffer
 
-  const remoteBirthdayImage = await fetch(signedUrl)
-  const remoteBirthdayImageArrayBuffer = await remoteBirthdayImage.arrayBuffer()
+  const remoteBirthdayImage = await fetch(signedUrl);
+  const remoteBirthdayImageArrayBuffer =
+    await remoteBirthdayImage.arrayBuffer();
 
   const imageBuffer = Buffer.from(remoteBirthdayImageArrayBuffer);
-
 
   // Call the chat.postMessage method with the required parameters
   //Here's Your Image It Expires Soon
   const responsePostMessage = await web.chat.postMessage({
-    channel: 'C04LXD2JHLM',
+    channel: "C04LXD2JHLM",
     blocks: [
-        {
-			"type": "section",
-			"text": {
-				"type": "plain_text",
-				"text": "Here's your Birthday Flyer"
-			}
-		},
-		{
-			"type": "image",
-			"title": {
-				"type": "plain_text",
-				"text": "Birthday Flyer",
-				"emoji": true
-			},
-			"image_url": `${signedUrl}`,
-			"alt_text": "Birthday Flyer"
-		},
+      {
+        type: "section",
+        text: {
+          type: "plain_text",
+          text: "Here's your Birthday Flyer",
+        },
+      },
+      {
+        type: "image",
+        title: {
+          type: "plain_text",
+          text: "Birthday Flyer",
+          emoji: true,
+        },
+        image_url: `${signedUrl}`,
+        alt_text: "Birthday Flyer",
+      },
     ],
- 
-    });
+  });
 
-    const uploadBirthdayDesign = await web.filesUploadV2({
-        file: imageBuffer,
-        filename: 'Birthday Design',
-        channel_id: 'C04LXD2JHLM',
-        initial_comment: 'Birthday Design'
-  });  
-  return signedUrl
+  const uploadBirthdayDesign = await web.filesUploadV2({
+    file: imageBuffer,
+    filename: "Birthday Design",
+    channel_id: "C04LXD2JHLM",
+    initial_comment: "Birthday Design",
+  });
+  return signedUrl;
 };
-  
-  
